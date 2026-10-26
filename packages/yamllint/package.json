@@ -1,0 +1,25 @@
+{
+  "name": "@ai-swfactory-oss/yamllint",
+  "description": "yamllint on a bundled CPython for your platform: hash-locked, no download at install time, no install scripts, isolated from the host Python",
+  "keywords": [
+    "yamllint",
+    "yaml",
+    "linter"
+  ],
+  "main": "index.js",
+  "types": "index.d.ts",
+  "bin": {
+    "yamllint": "bin/yamllint.js"
+  },
+  "files": [
+    "bin/yamllint.js",
+    "index.js",
+    "index.d.ts",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}

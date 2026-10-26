@@ -1,0 +1,174 @@
+name: update
+
+# Daily: follow the top-level requirements in upstream.json on PyPI (their
+# latest releases) and python-build-standalone (its latest build on the pinned
+# CPython minor). If anything moved, rewrite upstream.json:
+#   - each requirement pinned to its latest version;
+#   - the interpreter and licence archives with the sha256 GitHub reports,
+#     each cross-checked against the release's SHA256SUMS;
+#   - the package version follows the first requirement: if it moved, repack
+#     resets to 0; if only something else moved, repack goes up by one;
+# mark every lock "# PENDING", and open a pull request. lock.yml then
+# regenerates the locks on each platform (every hash equal to the index's),
+# and build.yml builds and tests the result. Merging publishes. Then make sure
+# main's version is published (a missing GitHub release v<version> re-runs the
+# publish).
+#
+# A new CPython minor is a manual bump (edit .python and the locks).
+#
+# Monthly: keep the schedule alive.
+
+on:
+  schedule:
+    - cron: "23 4 * * *"
+    - cron: "41 5 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+  actions: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    outputs:
+      missing: ${{ steps.check.outputs.missing }}
+      sha: ${{ steps.check.outputs.sha }}
+      bump: ${{ steps.bump.outputs.sha }}
+      branch: ${{ steps.bump.outputs.branch }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Is main's version published?
+        id: check
+        run: |
+          tag="v$(bash scripts/pkgver.sh)"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if grep -l PENDING locks/*.txt >/dev/null 2>&1; then
+            echo "missing=false" >> "$GITHUB_OUTPUT"; echo "locks are not complete: nothing to build"
+          elif gh release view "$tag" >/dev/null 2>&1; then
+            echo "missing=false" >> "$GITHUB_OUTPUT"; echo "$tag already released"
+          else
+            echo "missing=true" >> "$GITHUB_OUTPUT"; echo "$tag not released: building"
+          fi
+
+      - name: Keepalive (monthly)
+        if: github.event.schedule == '41 5 1 * *'
+        run: gh api -X PUT "repos/$GH_REPO/actions/workflows/update.yml/enable"
+
+      - name: Follow PyPI and python-build-standalone
+        id: follow
+        run: |
+          cp upstream.json upstream.json.orig
+          # Requirements.
+          first_moved=false; any_moved=false; i=0
+          for req in $(jq -r '.requirements[]' upstream.json); do
+            name=${req%%==*}; current=${req#*==}
+            latest=$(curl -fsSL --retry 3 "https://pypi.org/pypi/$name/json" | jq -er .info.version)
+            if [ "$latest" != "$current" ] && [ "$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -n1)" = "$latest" ]; then
+              echo "$name: $current -> $latest"
+              jq --argjson i "$i" --arg r "$name==$latest" '.requirements[$i] = $r' upstream.json > u.tmp && mv u.tmp upstream.json
+              any_moved=true
+              [ "$i" = 0 ] && first_moved=true
+            fi
+            i=$((i + 1))
+          done
+          # Interpreter.
+          minor=$(jq -er '.python.version | split(".")[0:2] | join(".")' upstream.json)
+          release=$(gh api repos/astral-sh/python-build-standalone/releases/latest)
+          build=$(jq -er .tag_name <<<"$release")
+          if [ "$build" != "$(jq -er .python.build upstream.json)" ]; then
+            curl -fsSL --retry 3 -o SHA256SUMS "https://github.com/astral-sh/python-build-standalone/releases/download/$build/SHA256SUMS"
+            new='{}'
+            for pair in darwin-arm64:aarch64-apple-darwin darwin-x64:x86_64-apple-darwin linux-arm64:aarch64-unknown-linux-gnu linux-x64:x86_64-unknown-linux-gnu; do
+              platform=${pair%%:*}; triple=${pair#*:}
+              for kind in install full; do
+                case "$kind" in install) suffix=install_only_stripped.tar.gz ;; full) suffix=pgo+lto-full.tar.zst ;; esac
+                asset=$(jq -c --arg m "$minor" --arg t "$triple" --arg s "$suffix" --arg b "$build" \
+                  'first(.assets[] | select(.name | test("^cpython-" + ($m | gsub("\\."; "\\.")) + "\\.[0-9]+\\+" + $b + "-" + $t + "-" + ($s | gsub("\\+"; "\\+") | gsub("\\."; "\\.")) + "$")))' <<<"$release")
+                [ -n "$asset" ] || { echo "no $kind asset for $triple CPython $minor in $build" >&2; exit 1; }
+                name=$(jq -r .name <<<"$asset"); digest=$(jq -r '.digest // ""' <<<"$asset")
+                listed=$(awk -v n="$name" '$2 == n { print $1 }' SHA256SUMS)
+                [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] && [ "sha256:$listed" = "$digest" ] ||
+                  { echo "$name: GitHub digest '$digest' and SHA256SUMS '$listed' disagree or are missing" >&2; exit 1; }
+                new=$(jq -c --arg p "$platform" --arg k "$kind" --arg n "$name" --arg d "$digest" '.[$p][$k] = {name: $n, digest: $d}' <<<"$new")
+              done
+            done
+            rm SHA256SUMS
+            pyver=$(jq -r '.["linux-x64"].install.name | capture("^cpython-(?<v>[0-9.]+)\\+").v' <<<"$new")
+            jq --arg b "$build" --arg v "$pyver" --argjson a "$new" '.python.build = $b | .python.version = $v | .python.assets = $a' upstream.json > u.tmp && mv u.tmp upstream.json
+            echo "python-build-standalone: -> $build (CPython $pyver)"
+            any_moved=true
+          fi
+          if [ "$any_moved" != true ]; then
+            echo "nothing moved"; rm upstream.json.orig; exit 0
+          fi
+          if [ "$first_moved" = true ]; then
+            jq '.version = (.requirements[0] | split("==")[1]) | .repack = 0' upstream.json > u.tmp
+          else
+            jq '.repack = ((.repack // 0) + 1)' upstream.json > u.tmp
+          fi
+          mv u.tmp upstream.json
+          rm upstream.json.orig
+          for lock in locks/*.txt; do
+            printf '# PENDING: regenerated by the lock workflow on the bump branch\n' > "$lock"
+          done
+          cat upstream.json
+          echo "version=$(bash scripts/pkgver.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Open the bump pull request
+        id: bump
+        if: steps.follow.outputs.version != ''
+        env:
+          VERSION: ${{ steps.follow.outputs.version }}
+        run: |
+          pkg=$(jq -er .package upstream.json)
+          branch="update/$pkg-$VERSION"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          if gh pr list --head "$branch" --state open --json number --jq '.[0].number' | grep -q .; then
+            echo "pull request for $branch already open"; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "chore: update $pkg to $VERSION"
+          git push --force origin "$branch"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          gh pr create --head "$branch" --base main --title "chore: update $pkg to $VERSION" \
+            --body "upstream.json follows the latest requirements on PyPI and the latest python-build-standalone build (interpreter digests from GitHub, cross-checked against SHA256SUMS). The lock workflow regenerated every platform lock on this branch, each hash equal to the index's sha256, and the update run then built and tested the packages on every platform (pull requests opened with GITHUB_TOKEN start no pr workflow); merging publishes them."
+
+  lock-bump:
+    needs: update
+    if: needs.update.outputs.bump != ''
+    uses: ./.github/workflows/lock.yml
+    with:
+      ref: ${{ needs.update.outputs.branch }}
+    secrets: inherit
+
+  test-bump:
+    needs: lock-bump
+    uses: ./.github/workflows/build.yml
+    with:
+      ref: ${{ needs.lock-bump.outputs.sha }}
+      publish: false
+    secrets: inherit
+
+  build:
+    needs: update
+    if: needs.update.outputs.missing == 'true'
+    uses: ./.github/workflows/build.yml
+    with:
+      ref: ${{ needs.update.outputs.sha }}
+      publish: true
+    secrets: inherit

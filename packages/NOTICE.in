@@ -1,0 +1,20 @@
+yamllint - a linter for YAML files (adrienverge/yamllint)
+https://github.com/adrienverge/yamllint
+Copyright (C) 2016 Adrien Vergé
+
+yamllint is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version (see LICENSE). It is distributed WITHOUT ANY WARRANTY.
+
+Bundled with it: CPython (PSF-2.0) from python-build-standalone, including the
+libraries CPython links (OpenSSL Apache-2.0, libffi MIT, SQLite public domain,
+zlib, and others; their licence texts are in LICENSES/python-build-standalone/),
+and the Python distributions yamllint needs: PyYAML (MIT) and pathspec
+(MPL-2.0; its source files are included as-is). All are GPL-3.0-compatible.
+
+This npm package is published by ai-swfactory-oss
+(https://github.com/ai-swfactory-oss/yamllint), which is not affiliated with
+the yamllint project or the Python Software Foundation. Nothing is modified:
+the interpreter is the upstream build and every distribution is installed from
+the wheel PyPI publishes. The package is distributed under GPL-3.0-or-later.
