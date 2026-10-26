@@ -63,7 +63,11 @@ tar -xzf "$install" -C "$out"
 test -x "$out/python/bin/python3" || { echo "fetch-python: no python/bin/python3 in the install archive" >&2; exit 1; }
 
 lic=$(mktemp -d)
-zstd -dc "$full" | tar -xf - -C "$lic" python/licenses
+# Decompress to a file, then extract from it. Piping zstd into a tar asked for
+# one member fails under pipefail whenever tar exits once it has that member
+# and zstd hits the closed pipe.
+zstd -d -q -o "$lic/full.tar" "$full"
+tar -xf "$lic/full.tar" -C "$lic" python/licenses
 cp -R "$lic/python/licenses/." "$out/LICENSES/python-build-standalone/"
 rm -rf "$lic"
 test -n "$(ls -A "$out/LICENSES/python-build-standalone")" || { echo "fetch-python: no licences in the full archive" >&2; exit 1; }

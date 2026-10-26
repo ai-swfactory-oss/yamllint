@@ -63,7 +63,8 @@ for platform in "${platforms[@]}"; do
   dir="$out/$pkg-$platform"
   mkdir -p "$dir"
   cp -R "$built/$platform/bin" "$built/$platform/python" "$built/$platform/LICENSES" "$dir/"
-  first=$(find "$dir/LICENSES/$license_dist" -type f | sort | head -n1)
+  # sed -n 1p reads all its input, so sort never writes to a closed pipe.
+  first=$(find "$dir/LICENSES/$license_dist" -type f | sort | sed -n 1p)
   test -n "$first" || { echo "stage: no licence file for $license_dist" >&2; exit 1; }
   cp "$first" "$dir/LICENSE"
   notice "$name" "$platform" "Platform: $os-$cpu." >"$dir/NOTICE"
