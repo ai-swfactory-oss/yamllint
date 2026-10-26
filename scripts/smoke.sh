@@ -20,15 +20,21 @@ version=$(bash "$root/scripts/pkgver.sh")
 launcher="$tgz/ai-swfactory-oss-yamllint-$version.tgz"
 native="$tgz/ai-swfactory-oss-yamllint-$platform-$version.tgz"
 
+# Read tarball contents into files first: `tar ... | grep -q` under pipefail
+# fails when grep exits early and tar hits the closed pipe.
+scan=$(mktemp -d)
 for f in "$launcher" "$native"; do
   test -f "$f" || { echo "smoke: missing $f" >&2; exit 1; }
-  if tar -xzOf "$f" package/package.json | jq -e '.scripts // {} | keys | any(test("install"))' >/dev/null; then
+  tar -xzOf "$f" package/package.json >"$scan/package.json"
+  if jq -e '.scripts // {} | keys | any(test("install"))' "$scan/package.json" >/dev/null; then
     echo "smoke: $f declares an install script" >&2; exit 1
   fi
-  tar -xzOf "$f" package/NOTICE | grep -q 'Corresponding source' || { echo "smoke: $f NOTICE does not point at the corresponding source" >&2; exit 1; }
+  tar -xzOf "$f" package/NOTICE >"$scan/NOTICE"
+  grep -q 'Corresponding source' "$scan/NOTICE" || { echo "smoke: $f NOTICE does not point at the corresponding source" >&2; exit 1; }
 done
-tar -tzf "$native" | grep -q '^package/LICENSES/python-build-standalone/' || { echo "smoke: no bundled-library licences" >&2; exit 1; }
-tar -tzf "$native" | grep -q '^package/LICENSES/yamllint/' || { echo "smoke: no yamllint licence" >&2; exit 1; }
+tar -tzf "$native" >"$scan/contents.txt"
+grep -q '^package/LICENSES/python-build-standalone/' "$scan/contents.txt" || { echo "smoke: no bundled-library licences" >&2; exit 1; }
+grep -q '^package/LICENSES/yamllint/' "$scan/contents.txt" || { echo "smoke: no yamllint licence" >&2; exit 1; }
 
 work=$(mktemp -d)
 cd "$work" || exit 1
