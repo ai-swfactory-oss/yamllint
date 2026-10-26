@@ -1,0 +1,5 @@
+# Hash lock for linux-arm64 (CPython 3.13). Every hash is the sha256 PyPI
+# publishes for that file. Regenerate with the lock workflow, never by hand.
+pathspec==1.1.1 --hash=sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189
+pyyaml==6.0.3 --hash=sha256:ee2922902c45ae8ccada2c5b501ab86c36525b883eff4255313a253a3160861c
+yamllint==1.38.0 --hash=sha256:fc394a5b3be980a4062607b8fdddc0843f4fa394152b6da21722f5d59013c220

@@ -1,0 +1,144 @@
+name: lock
+
+# Keeps locks/<platform>.txt honest. On each platform's own runner, with the
+# pinned CPython:
+#
+# - A lock that is not a complete hash lock (for example "# PENDING" after an
+#   update) is regenerated: pip resolves upstream.json .requirements with
+#   binary wheels only (`pip install --dry-run --report`), every resolved file
+#   is downloaded and hashed here, and the hash must equal the sha256 the index
+#   reported for it. The new locks are committed to the branch under test.
+# - A complete lock is verified: every hash in it must be one PyPI publishes
+#   for that distribution and version, or the run fails.
+#
+# A commit pushed with GITHUB_TOKEN starts no new pr workflow, so after a lock
+# commit the pull request is re-run (closed and reopened, or by a push).
+
+on:
+  pull_request:
+    paths: [upstream.json, locks/**, .github/workflows/lock.yml]
+  workflow_call:
+    inputs:
+      ref:
+        description: Branch to verify and, if needed, re-lock
+        type: string
+        required: true
+    outputs:
+      sha:
+        description: Head of the branch after the run (the lock commit, if one was made)
+        value: ${{ jobs.commit.outputs.sha }}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lock-${{ inputs.ref || github.head_ref }}
+  cancel-in-progress: false
+
+jobs:
+  lock:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux-x64
+          - runner: ubuntu-24.04-arm
+            platform: linux-arm64
+          - runner: macos-latest
+            platform: darwin-arm64
+          - runner: macos-15-intel
+            platform: darwin-x64
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      PLATFORM: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.head_ref }}
+
+      - name: Tools
+        run: command -v zstd >/dev/null || brew install zstd
+
+      - name: Verify or regenerate locks/${{ matrix.platform }}.txt
+        run: |
+          lock="locks/$PLATFORM.txt"
+          sha256() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+          if grep -qE '^[A-Za-z0-9_.-]+==[^ ]+ --hash=sha256:[0-9a-f]{64}' "$lock" 2>/dev/null && ! grep -q PENDING "$lock"; then
+            echo "verifying $lock against PyPI"
+            grep -E '^[^#]' "$lock" | while read -r req hash; do
+              name=${req%%==*}; ver=${req#*==}; hash=${hash#--hash=sha256:}
+              if ! curl -fsSL --retry 3 "https://pypi.org/pypi/$name/$ver/json" | jq -e --arg h "$hash" 'any(.urls[]; .digests.sha256 == $h)' >/dev/null; then
+                echo "$req: $hash is not a file PyPI publishes for it" >&2; exit 1
+              fi
+              echo "$req OK"
+            done
+            cp "$lock" "lock-$PLATFORM.txt"
+          else
+            echo "$lock is not a complete hash lock: regenerating"
+            bash scripts/fetch-python.sh "$RUNNER_TEMP/py" "$PLATFORM"
+            py="$RUNNER_TEMP/py/python/bin/python3"
+            jq -r '.requirements[]' upstream.json > "$RUNNER_TEMP/requirements.in"
+            "$py" -I -m pip install --disable-pip-version-check --no-cache-dir --dry-run --ignore-installed \
+              --only-binary=:all: --report "$RUNNER_TEMP/report.json" -r "$RUNNER_TEMP/requirements.in"
+            {
+              printf '# Hash lock for %s (CPython %s). Every hash is the sha256 PyPI\n' "$PLATFORM" "$(jq -r .python.version upstream.json)"
+              printf '# publishes for that file. Regenerate with the lock workflow, never by hand.\n'
+              jq -r '.install[] | [.metadata.name, .metadata.version, .download_info.url, (.download_info.archive_info.hashes.sha256 // .download_info.archive_info.hash // "")] | @tsv' \
+                "$RUNNER_TEMP/report.json" | sort -f | while IFS=$'\t' read -r name ver url indexed; do
+                indexed=${indexed#sha256=}
+                curl -fsSL --retry 3 -o "$RUNNER_TEMP/file" "$url"
+                got=$(sha256 "$RUNNER_TEMP/file")
+                if [ "$got" != "$indexed" ]; then
+                  echo "$name $ver: downloaded $got, the index reports '$indexed'" >&2; exit 1
+                fi
+                printf '%s==%s --hash=sha256:%s\n' "$(tr '[:upper:]_.' '[:lower:]--' <<<"$name")" "$ver" "$got"
+              done
+            } > "lock-$PLATFORM.txt"
+            cat "lock-$PLATFORM.txt"
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: lock-${{ matrix.platform }}
+          path: lock-${{ matrix.platform }}.txt
+          if-no-files-found: error
+
+  commit:
+    needs: lock
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    env:
+      BRANCH: ${{ inputs.ref || github.head_ref }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.head_ref }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: lock-*
+          merge-multiple: true
+          path: new
+
+      - name: Commit regenerated locks
+        id: commit
+        run: |
+          for f in new/lock-*.txt; do
+            platform=${f#new/lock-}; platform=${platform%.txt}
+            cp "$f" "locks/$platform.txt"
+          done
+          if git diff --quiet -- locks; then
+            echo "locks unchanged"
+          else
+            git diff -- locks
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "chore: regenerate hash locks (every hash equals the index's sha256)" -- locks
+            git push origin "HEAD:$BRANCH"
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
