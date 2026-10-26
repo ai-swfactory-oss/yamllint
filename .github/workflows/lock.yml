@@ -56,9 +56,11 @@ jobs:
     env:
       PLATFORM: ${{ matrix.platform }}
     steps:
+      # The pull request's head commit, not its branch: the branch may already
+      # be merged and deleted by the time a runner picks this job up.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.ref || github.head_ref }}
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
 
       - name: Tools
         run: command -v zstd >/dev/null || brew install zstd
@@ -115,9 +117,10 @@ jobs:
     env:
       BRANCH: ${{ inputs.ref || github.head_ref }}
     steps:
+      # Commit on top of the tested head; the push names the branch explicitly.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.ref || github.head_ref }}
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
 
       - uses: actions/download-artifact@v8
         with:
