@@ -73,5 +73,8 @@ here=\$(cd "\$(dirname "\$0")" && pwd -P)
 exec "\$here/../python/bin/python3" -I -m $module "\$@"
 EOF
   chmod 755 "$out/bin/$tool"
-  echo "build: $tool -> $("$out/bin/$tool" --version 2>&1 | head -1)"
+  # Into a file first: a pipe into head can fail the writer under pipefail.
+  "$out/bin/$tool" --version >"$out/.version.txt" 2>&1
+  echo "build: $tool -> $(sed -n 1p "$out/.version.txt")"
+  rm -f "$out/.version.txt"
 done
