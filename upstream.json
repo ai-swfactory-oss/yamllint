@@ -1,56 +1,60 @@
 {
   "package": "yamllint",
   "version": "1.38.0",
-  "repack": 0,
+  "repack": 1,
   "license": "GPL-3.0-or-later",
   "license_dist": "yamllint",
-  "requirements": ["yamllint==1.38.0"],
-  "gpl_sources": ["yamllint"],
+  "requirements": [
+    "yamllint==1.38.0"
+  ],
+  "gpl_sources": [
+    "yamllint"
+  ],
   "tools": {
     "yamllint": "yamllint"
   },
   "python": {
-    "version": "3.13.17",
-    "build": "20261021",
+    "version": "3.13.18",
+    "build": "20261124",
     "assets": {
       "darwin-arm64": {
         "install": {
-          "name": "cpython-3.13.17+20261021-aarch64-apple-darwin-install_only_stripped.tar.gz",
-          "digest": "sha256:8dc60610a82f1e73be7faf964383e02520f95f6e39592a5c37c3809f5a7b798e"
+          "name": "cpython-3.13.18+20261124-aarch64-apple-darwin-install_only_stripped.tar.gz",
+          "digest": "sha256:296f0903cccda15a5c9d3d8393cd2204718aeffd9b095a00f812d75c7b1c0967"
         },
         "full": {
-          "name": "cpython-3.13.17+20261021-aarch64-apple-darwin-pgo+lto-full.tar.zst",
-          "digest": "sha256:3ccb423f96990a6ac6a10e23052ba6c70144117559af097cd0c0305939dc015b"
+          "name": "cpython-3.13.18+20261124-aarch64-apple-darwin-pgo+lto-full.tar.zst",
+          "digest": "sha256:cbb424442f2f04454984a85c260ec56dcb99b1af3fdafa16c03f492d92212f35"
         }
       },
       "darwin-x64": {
         "install": {
-          "name": "cpython-3.13.17+20261021-x86_64-apple-darwin-install_only_stripped.tar.gz",
-          "digest": "sha256:ce9c748c8f7525c0052247edb2435fdb1cac89c77e687e0e199eaf2b827668c2"
+          "name": "cpython-3.13.18+20261124-x86_64-apple-darwin-install_only_stripped.tar.gz",
+          "digest": "sha256:bb16e167ec9e38368118ce3e43ba2c7852fea2cdba16e1852555a8997747f78a"
         },
         "full": {
-          "name": "cpython-3.13.17+20261021-x86_64-apple-darwin-pgo+lto-full.tar.zst",
-          "digest": "sha256:174c738acbf8b768c96c8b1f4e4b40f8d7a04059192360a920fe8c305154bbc8"
+          "name": "cpython-3.13.18+20261124-x86_64-apple-darwin-pgo+lto-full.tar.zst",
+          "digest": "sha256:b56d8dcca317f8a307d51d0d81f784b9ac6e469abefcff48ed1085221fb9922d"
         }
       },
       "linux-arm64": {
         "install": {
-          "name": "cpython-3.13.17+20261021-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-          "digest": "sha256:c6857c65b996701a5da104cbb49b35249c0c026dc0664239b04f7156aa88326a"
+          "name": "cpython-3.13.18+20261124-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+          "digest": "sha256:300d388cef58ff23f101e1a41512dc51db9adae136b138c61af9ae1b1d9703a7"
         },
         "full": {
-          "name": "cpython-3.13.17+20261021-aarch64-unknown-linux-gnu-pgo+lto-full.tar.zst",
-          "digest": "sha256:6464bea3d1b41ebcb238ebdbb32332e9c01871d4ad14e7e66ca6aca18d5135fb"
+          "name": "cpython-3.13.18+20261124-aarch64-unknown-linux-gnu-pgo+lto-full.tar.zst",
+          "digest": "sha256:233e6ab00c3a62459421974312311891ae2528ad9a4c133210d09c5acf70c5b0"
         }
       },
       "linux-x64": {
         "install": {
-          "name": "cpython-3.13.17+20261021-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-          "digest": "sha256:f829adc9d888e76c8801b4799ed444188d35239fcae3a9808a99ec5cb0d8d92c"
+          "name": "cpython-3.13.18+20261124-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+          "digest": "sha256:b56ceb4fc1d8f0c49b7bd4dc91cd176bad7b86a88b9fc509bae6b10b3ee36692"
         },
         "full": {
-          "name": "cpython-3.13.17+20261021-x86_64-unknown-linux-gnu-pgo+lto-full.tar.zst",
-          "digest": "sha256:344eec7e761e7b3dccce0ce2d91a3e70d40f8ff5d3ce7d907d979c23e8451fc7"
+          "name": "cpython-3.13.18+20261124-x86_64-unknown-linux-gnu-pgo+lto-full.tar.zst",
+          "digest": "sha256:ad4ec6c5d6ae9edf5675cb7a86c53b2db6471f258734e2181a2c110e01ba6f44"
         }
       }
     }
